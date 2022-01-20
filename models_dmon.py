@@ -177,16 +177,19 @@ class DMoN(nn.Module):
 
 
 class GCN_DMoN(nn.Module):
-    def __init__(self, n_in, n_hid, n_clusters, gcn_type="dmon",
-                 activation="relu", collapse_regularization=0.1,
+    def __init__(self, n_in, n_hid, n_out ,n_clusters, gcn_type="dmon",
+                 activation="selu", collapse_regularization=0.1,
                  dropout_rate=0):
         super(GCN_DMoN, self).__init__()
         if gcn_type.lower() == "dmon":
-            self.gcn = GCNLayer_Dmon(n_in, n_hid)
+            self.gcn_h = GCNLayer_Dmon(n_in, n_hid)
+            self.gcn_o = GCNLayer_Dmon(n_hid, n_out)
         else:
-            self.gcn = GCNLayer_Kipf(n_in, n_hid)
+            self.gcn_h = GCNLayer_Kipf(n_in, n_hid)
+            self.gcn_o = GCNLayer_Kipf(n_hid, n_out)
             
-        self.dmon = DMoN(n_hid, n_clusters, collapse_regularization, dropout_rate)
+            
+        self.dmon = DMoN(n_out, n_clusters, collapse_regularization, dropout_rate)
         if activation.lower() == "relu":
             self.activation = F.relu
         else: self.activation = F.selu
@@ -197,16 +200,63 @@ class GCN_DMoN(nn.Module):
             A: adjacency matrix; shape:[batch_size, num_nodes]
             X:node features; shape:[batch_size, num_nodes, n_in]
         """
-        if isinstance(self.gcn, GCNLayer_Dmon):
+        if isinstance(self.gcn_h, GCNLayer_Dmon):
             A_normalized = normalize_graph(A, add_self_loops=False)
         else:
             A_normalized = normalize_graph(A, add_self_loops=True)
             
-        hidden = self.activation(self.gcn(A_normalized, X))
+        hidden = self.activation(self.gcn_h(A_normalized, X))
         #shape: [batch_size, num_nodes, n_hid]
+        hidden = self.activation(self.gcn_o(A_normalized, hidden))
         assignments, spectral_loss, collapse_loss = self.dmon(A, hidden)
         
         return assignments, spectral_loss, collapse_loss
+        
+        
+
+class DMoN_GALA(nn.Module):
+    def __init__(self, n_in, n_hid, n_out, n_clusters, gcn_type="dmon",
+                 activation="selu", collapse_regularization=0.1, dropout_rate=0):
+        super(DMoN_GALA, self).__init__()
+        if gcn_type.lower() == "dmon":
+            self.gcn_h = GCNLayer_Dmon(n_in, n_hid)
+            self.gcn_o = GCNLayer_Dmon(n_hid, n_out)
+        else:
+            self.gcn_h = GCNLayer_Kipf(n_in, n_hid)
+            self.gcn_o = GCNLayer_Kipf(n_hid, n_out)
+            
+        #GALA decoder part
+        self.gcn_dh = GCNLayer_Kipf(n_out, n_hid)
+        self.gcn_do = GCNLayer_Kipf(n_hid, n_in)
+        
+        self.dmon = DMoN(n_out, n_clusters, collapse_regularization, dropout_rate)
+        if activation.lower() == "relu":
+            self.activation = F.relu
+        else: self.activation = F.selu
+        
+    def forward(self, A, X):
+        """
+        args:
+            A: adjacency matrix; shape:[batch_size, num_nodes]
+            X:node features; shape:[batch_size, num_nodes, n_in]
+        """
+        if isinstance(self.gcn_h, GCNLayer_Dmon):
+            A_normalized = normalize_graph(A, add_self_loops=False)
+        else:
+            A_normalized = normalize_graph(A, add_self_loops=True)
+            
+        A_sharp = laplacian_sharpen(A)
+        hidden = self.activation(self.gcn_h(A_normalized, X))
+        #shape: [batch_size, num_nodes, n_hid]
+        hidden = self.activation(self.gcn_o(A_normalized, hidden))
+        assignments, spectral_loss, collapse_loss = self.dmon(A, hidden)
+        
+        X_rec = self.activation(self.gcn_dh(A_sharp, hidden))
+        X_rec = self.torch.sigmoid(gcn_do(A_sharp, X_rec))
+        
+        rec_loss = torch.norm(X, X_rec)/(X.size(0)*X.size(1))
+        
+        return assignments, spectral_loss, collapse_loss, rec_loss
         
         
         

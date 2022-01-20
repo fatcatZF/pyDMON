@@ -2,21 +2,21 @@ from __future__ import division
 from __future__ import print_function
 
 import time
-import datetime
-import os
-import pickle
 import argparse
-import numpy as np
+import pickle
+import os
+import datetime
 
-import torch
-import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
+import torch.nn.functional as F
+
 
 from utils import *
 from models_dmon import *
 
 from sklearn.metrics import normalized_mutual_info_score as nmi
+
 
 # Training settings
 parser = argparse.ArgumentParser()
@@ -63,7 +63,6 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
     
-
 #Save model and meta-data
 if args.save_folder:
     exp_counter = 0
@@ -81,13 +80,12 @@ else:
     print("WARNING: No save_folder provided!" +
           "Testing (within this script) will throw an error.")
     
-
-
+    
 adj, features, labels, label_indices = load_npz("data/cora.npz")
 adj_tensor = torch.tensor(adj.todense()).unsqueeze(0).float()
 features_tensor = torch.tensor(features.todense()).unsqueeze(0).float()
 
-model = GCN_DMoN(features_tensor.size(-1), args.hidden, args.out ,args.n_clusters, 
+model = DMoN_GALA(features_tensor.size(-1), args.hidden, args.out ,args.n_clusters, 
                       args.gcn_type, args.gcn_activation, args.collapse_regularization,
                       args.dropout)
 
@@ -103,9 +101,6 @@ scheduler = lr_scheduler.StepLR(optimizer, step_size=args.lr_decay,
                                 gamma=args.gamma)
 
 
-
-
-
 if args.cuda:
     model.cuda()
     features_tensor.cuda()
@@ -115,46 +110,52 @@ if args.cuda:
     #adj_valid.cuda()
     #adj_test.cuda()
     
-
-
-
+    
 def train(epoch, best_val_loss):
     t = time.time()
     loss_train = []
     sp_loss_train = []
     co_loss_train = []
+    rec_loss_train = []
     
     model.train()
     optimizer.zero_grad()
     
-    assignments, spectral_loss, collapse_loss = model(adj_tensor, features_tensor)
-    loss = spectral_loss+collapse_loss
+    assignments, spectral_loss, collapse_loss, rec_loss = model(adj_tensor, features_tensor)
+    loss = spectral_loss+collapse_loss+rec_loss
     loss.backward()
     optimizer.step()
     loss_train.append(loss.item())
     sp_loss_train.append(spectral_loss.item())
     co_loss_train.append(collapse_loss.item())
+    rec_loss_train.append(rec_loss.item())
     
     
     loss_val = []
     sp_loss_val = []
     co_loss_val = []
+    rec_loss_val = []
     
     model.eval()
     with torch.no_grad():
-        assignments, spectral_loss, collapse_loss = model(adj_tensor, features_tensor)
-        loss = spectral_loss+collapse_loss
+        assignments, spectral_loss, collapse_loss, rec_loss = model(adj_tensor, features_tensor)
+        loss = spectral_loss+collapse_loss+rec_loss
         loss_val.append(loss.item())
         sp_loss_val.append(spectral_loss.item())
         co_loss_val.append(collapse_loss.item())
+        rec_loss_val.append(rec_loss.item())
+        
         
     print("Epoch: {:04d}".format(epoch+1),
           "loss_train: {:.10f}".format(loss_train[0]),
           "sp_loss_train: {:.10f}".format(sp_loss_train[0]),
           "co_loss_train: {:.10f}".format(co_loss_train[0]),
+          "rec_loss_train: {:.10f}".format(rec_loss_train[0]),
           "loss_val: {:.10f}".format(loss_val[0]),
           "sp_loss_val: {:.10f}".format(sp_loss_val[0]),
-          "co_loss_val: {:.10f}".format(co_loss_val[0]))
+          "co_loss_val: {:.10f}".format(co_loss_val[0]),
+          "rec_loss_val: {:.10f}".format(rec_loss_val[0])
+          )
     
     
     if args.save_folder and np.mean(loss_val) < best_val_loss:
@@ -164,9 +165,11 @@ def train(epoch, best_val_loss):
               "loss_train: {:.10f}".format(loss_train[0]),
               "sp_loss_train: {:.10f}".format(sp_loss_train[0]),
               "co_loss_train: {:.10f}".format(co_loss_train[0]),
+              "rec_loss_train: {:.10f}".format(rec_loss_train[0]),
               "loss_val: {:.10f}".format(loss_val[0]),
               "sp_loss_val: {:.10f}".format(sp_loss_val[0]),
               "co_loss_val: {:.10f}".format(co_loss_val[0]),
+              "rec_loss_val: {:.10f}".format(rec_loss_val[0]),
               file=log)
         log.flush()
         
@@ -185,14 +188,16 @@ def test():
     loss_test = []
     sp_loss_test = []
     co_loss_test = []
+    rec_loss_test = []
     
     model.eval()
     with torch.no_grad():
-        assignments, spectral_loss, collapse_loss = model(adj_tensor, features_tensor)
+        assignments, spectral_loss, collapse_loss, rec_loss = model(adj_tensor, features_tensor)
         loss = spectral_loss+collapse_loss
         loss_test.append(loss.item())
         sp_loss_test.append(spectral_loss.item())
         co_loss_test.append(collapse_loss.item())
+        rec_loss_test.append(rec_loss.item())
         
         clusters = assignments.argmax(-1).squeeze().numpy()
         nmi_value = nmi(clusters[label_indices], labels)
@@ -201,7 +206,8 @@ def test():
           "loss_test: {:.10f}".format(loss_test[0]),
           "sp_loss_test: {:.10f}".format(sp_loss_test[0]),
           "co_loss_test: {:.10f}".format(co_loss_test[0]),
-          "nmi_value: {:.10f}".format(nmi_value)
+          "nmi_value: {:.10f}".format(nmi_value),
+          "rec_loss_test: {:.10f}".format(rec_loss_test[0]),
           )
     
 
@@ -226,18 +232,8 @@ if args.save_folder:
     log.flush()
     
 test()
-    
-    
-        
-        
-    
 
 
-
-
-    
-
-    
 
 
 

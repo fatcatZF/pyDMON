@@ -22,6 +22,29 @@ def normalize_graph(graph, add_self_loops=True):
     return degree@graph@degree
 
 
+
+def laplacian_sharpen(A):
+    """
+    args:
+        A; batches of adjacency matrices corresponding to edge types
+          size: [batch_size, num_edgeTypes, num_nodes, num_nodes]
+    """
+    I = torch.eye(A.size(-1))
+    I = I.unsqueeze(0).unsqueeze(1)
+    I = I.expand(A.size(0), A.size(1), I.size(2), I.size(3))
+    #size: [batch_size, num_edgeTypes, num_atoms, num_atoms]
+    Ap = 2*I-A
+    D_values = A.sum(-1)+2 #shape: [batch_size, num_edgeTypes, num_atoms]
+    D_values_p = torch.pow(D_values, -0.5)
+    D_p = torch.diag_embed(D_values_p)
+    
+    return torch.matmul(D_p, torch.matmul(Ap, D_p)) 
+
+
+
+
+
+
 def encode_onehot(labels):
     classes = set(labels)
     classes_dict = {c: np.identity(len(classes))[i, :] for i, c in
