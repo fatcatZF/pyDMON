@@ -56,7 +56,7 @@ parser.add_argument('--load-folder', type=str, default='',
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-
+print(args)
 
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
@@ -97,6 +97,18 @@ if args.load_folder:
     model.load_state_dict(torch.load(model_file))
     
 
+
+if args.cuda:
+    model = model.to("cuda")
+    features_tensor = features_tensor.to("cuda")
+    #features_valid.cuda()
+    #features_test.cuda()
+    adj_tensor = adj_tensor.to("cuda")
+    #adj_valid.cuda()
+    #adj_test.cuda()
+
+
+
 optimizer = optim.Adam(list(model.parameters()),
                        lr=args.lr, weight_decay=args.weight_decay)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.lr_decay,
@@ -105,16 +117,16 @@ scheduler = lr_scheduler.StepLR(optimizer, step_size=args.lr_decay,
 
 
 
-
+"""
 if args.cuda:
-    model.cuda()
-    features_tensor.cuda()
+    model = model.to("cuda")
+    features_tensor = features_tensor.to("cuda")
     #features_valid.cuda()
     #features_test.cuda()
-    adj_tensor.cuda()
+    adj_tensor = adj_tensor.to("cuda")
     #adj_valid.cuda()
     #adj_test.cuda()
-    
+"""    
 
 
 
@@ -127,6 +139,10 @@ def train(epoch, best_val_loss):
     model.train()
     optimizer.zero_grad()
     
+    #print(next(model.parameters()).device)
+    #print(adj_tensor.device)
+    #print(features_tensor.device)    
+
     assignments, spectral_loss, collapse_loss = model(adj_tensor, features_tensor)
     loss = spectral_loss+collapse_loss
     loss.backward()
@@ -194,7 +210,7 @@ def test():
         sp_loss_test.append(spectral_loss.item())
         co_loss_test.append(collapse_loss.item())
         
-        clusters = assignments.argmax(-1).squeeze().numpy()
+        clusters = assignments.cpu().argmax(-1).squeeze().numpy()
         nmi_value = nmi(clusters[label_indices], labels)
         
     print("Epoch: {:04d}".format(epoch+1),

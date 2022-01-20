@@ -29,7 +29,10 @@ def laplacian_sharpen(A):
         A; batches of adjacency matrices corresponding to edge types
           size: [batch_size, num_edgeTypes, num_nodes, num_nodes]
     """
-    I = torch.eye(A.size(-1))
+    if A.is_cuda:
+      I = torch.eye(A.size(-1)).to("cuda")
+    else:
+      I = torch.eye(A.size(-1))
     I = I.unsqueeze(0).unsqueeze(1)
     I = I.expand(A.size(0), A.size(1), I.size(2), I.size(3))
     #size: [batch_size, num_edgeTypes, num_atoms, num_atoms]

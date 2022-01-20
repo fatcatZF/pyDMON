@@ -165,8 +165,16 @@ class DMoN(nn.Module):
         #shape:[batch_size, n_cluster, n_cluster]
         
         spectral_loss = -torch.diagonal(graph_pooled-normalizer, dim1=-2, dim2=-1).sum()/2/edge_weights/batch_size
-        
-        collapse_loss = (torch.norm(cluster_sizes)/num_nodes*torch.sqrt(torch.FloatTensor([self.n_clusters]))-1)/batch_size
+ 
+       
+
+        if next(self.parameters()).is_cuda:     
+             
+           collapse_loss = ((torch.norm(cluster_sizes)/num_nodes*torch.sqrt(torch.cuda.FloatTensor([self.n_clusters]))-1)/batch_size)        
+
+        else:
+          
+           collapse_loss = ((torch.norm(cluster_sizes)/num_nodes*torch.sqrt(torch.FloatTensor([self.n_clusters]))-1)/batch_size)
         
         
         return assignments, spectral_loss, collapse_loss
@@ -252,9 +260,9 @@ class DMoN_GALA(nn.Module):
         assignments, spectral_loss, collapse_loss = self.dmon(A, hidden)
         
         X_rec = self.activation(self.gcn_dh(A_sharp, hidden))
-        X_rec = self.torch.sigmoid(gcn_do(A_sharp, X_rec))
+        X_rec = torch.sigmoid(self.gcn_do(A_sharp, X_rec))
         
-        rec_loss = torch.norm(X, X_rec)/(X.size(0)*X.size(1))
+        rec_loss = torch.norm(X-X_rec)/(X.size(0)*X.size(1))
         
         return assignments, spectral_loss, collapse_loss, rec_loss
         

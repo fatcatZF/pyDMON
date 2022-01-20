@@ -95,20 +95,25 @@ if args.load_folder:
     model.load_state_dict(torch.load(model_file))
     
 
+if args.cuda:
+    model = model.cuda()
+    features_tensor = features_tensor.cuda()
+    #features_valid.cuda()
+    #features_test.cuda()
+    adj_tensor = adj_tensor.cuda()
+    #adj_valid.cuda()
+    #adj_test.cuda()
+
+
+
+
+
 optimizer = optim.Adam(list(model.parameters()),
                        lr=args.lr, weight_decay=args.weight_decay)
 scheduler = lr_scheduler.StepLR(optimizer, step_size=args.lr_decay,
                                 gamma=args.gamma)
 
 
-if args.cuda:
-    model.cuda()
-    features_tensor.cuda()
-    #features_valid.cuda()
-    #features_test.cuda()
-    adj_tensor.cuda()
-    #adj_valid.cuda()
-    #adj_test.cuda()
     
     
 def train(epoch, best_val_loss):
